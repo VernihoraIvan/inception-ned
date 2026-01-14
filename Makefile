@@ -1,10 +1,10 @@
 COMPOSE=@docker compose -f ./srcs/docker-compose.yml
 
 up:
-# 	sudo mkdir -p /home/iverniho/data/wordpress
-# 	sudo mkdir -p /home/iverniho/data/mariadb
-# 	sudo mkdir -p /home/iverniho/data/website
-# 	sudo chown -R 33:33 /home/iverniho/data/wordpress
+	sudo mkdir -p /Users/ivanvernihora/Documents/GitHub/data/wordpress
+	sudo mkdir -p /Users/ivanvernihora/Documents/GitHub/data/mariadb
+	sudo mkdir -p /Users/ivanvernihora/Documents/GitHub/data/website
+	sudo chown -R 33:33 /Users/ivanvernihora/Documents/GitHub/data/wordpress
 	$(COMPOSE) up -d
 
 re:

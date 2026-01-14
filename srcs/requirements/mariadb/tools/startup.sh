@@ -1,39 +1,57 @@
-#!/bin/sh
+#!/bin/bash
 
-mkdir -p /run/mysqld
-chown -R mysql:mysql /run/mysqld
-chown -R mysql:mysql /var/lib/mysql
+echo "Starting startup.sh script..."
 
-if [ -d "/var/lib/mysql/${DB_NAME}" ]; then 
-	echo "Database already exists"
-else
-	echo "Starting MariaDB service..."
-	
-	# Start in background directly to avoid service wrapper issues
-	mariadbd-safe --skip-networking &
-	pid=$!
-	
-	# Wait for it to be ready
-	while ! mariadb-admin ping --silent; do
-		sleep 1
-	done
 
-	echo "Creating Database: ${DB_NAME}"
-	mariadb -e "CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\`;"
+set -eu # fail whole script if one step fails
+echo "Setting up environment variables..."
 
-	echo "Creating User: ${DB_USERNAME}"
-	mariadb -e "CREATE USER IF NOT EXISTS \`${DB_USERNAME}\`@'localhost' IDENTIFIED BY '${DB_PASSWORD}';"
-	mariadb -e "GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO \`${DB_USERNAME}\`@'%' IDENTIFIED BY '${DB_PASSWORD}';"
+for var in DB_NAME DB_USERNAME DB_PASSWORD DB_ROOT_PASSWORD; do
+  if [ -z "${!var+x}" ]; then
+    echo "Error: $var is not set"
+    exit 1
+  fi
+  if [ -z "${!var}" ]; then
+    echo "Error: $var is empty"
+    exit 1
+  fi
+done
+echo "Environment variables set"
 
-	echo "Setting Root Password..."
-	mariadb -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${DB_ROOT_PASSWORD}';"
-	mariadb -e "FLUSH PRIVILEGES;"
+mkdir -p /var/run/mysqld # if it doesn't exist or belongs to root, daemon fails
+chown -R mysql:mysql /var/lib/mysql /var/run/mysqld
 
-	echo "Stopping temporary MariaDB..."
-	mariadb-admin -u root -p${DB_ROOT_PASSWORD} shutdown
-	
-	wait $pid
+echo "Creating directories..."
+
+if [ ! -d "/var/lib/mysql/mysql" ]; then
+  echo "Database not found, initializing"
+  mariadb-install-db --user=mysql --datadir='/var/lib/mysql'
+
+  mysqld --user=mysql --datadir='/var/lib/mysql' --skip-networking &
+  pid="$!" # last background process ID
+
+  until mysqladmin ping --silent; do
+    echo "Waiting for MariaDB..."
+    sleep 1
+  done
+
+  mysql -u root <<-EOSQL
+    CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\`;
+    CREATE USER IF NOT EXISTS '${DB_USERNAME}'@'%' IDENTIFIED BY '${DB_PASSWORD}';
+    GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USERNAME}'@'%';
+    CREATE USER IF NOT EXISTS '${DB_USERNAME}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';
+    GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USERNAME}'@'localhost';
+    GRANT SHOW DATABASES TO '${DB_USERNAME}'@'localhost';
+    ALTER USER 'root'@'localhost' IDENTIFIED VIA mysql_native_password USING PASSWORD('${DB_ROOT_PASSWORD}');
+    FLUSH PRIVILEGES;
+EOSQL
+
+  echo "Database initialized"
+
+  # stop temporary server
+  kill "$pid"
+  wait "$pid" || true
 fi
 
-
-exec mysqld_safe
+echo "Startup.sh script completed"
+exec "$@"
