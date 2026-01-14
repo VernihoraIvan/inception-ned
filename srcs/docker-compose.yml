@@ -1,0 +1,15 @@
+services:
+  mariadb:
+    container_name: mariadb
+    build: ./requirements/mariadb/.
+    networks:
+      - inception
+    restart: always
+    env_file:
+      - .env
+
+
+networks:
+  inception:
+    name: inception
+
