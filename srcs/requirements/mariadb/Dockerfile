@@ -1,13 +1,15 @@
-FROM debian:bullseye
-
-RUN apt-get update -y && apt-get upgrade -y && apt-get install -y mariadb-server
-
-COPY ./conf/55-server.cnf /etc/mysql/mariadb.conf.d/
-COPY ./tools/startup.sh /usr/local/bin/
-
-RUN chmod +x /usr/local/bin/startup.sh
+FROM debian:bookworm
 
 EXPOSE 3306
 
-ENTRYPOINT ["startup.sh"]
-CMD ["mariadbd"]
+RUN apt-get update && apt-get install -y mariadb-server mariadb-client \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY ./conf/50-server.cnf /etc/mysql/mariadb.conf.d/50-server.cnf
+COPY ./tools/init.sh /usr/local/bin/init.sh
+
+RUN chmod +x /usr/local/bin/init.sh
+
+ENTRYPOINT ["/usr/local/bin/init.sh"]
+
+CMD ["mysql", "--user=mysql", "--datadir=/var/lib/mysql"]
